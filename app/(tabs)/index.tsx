@@ -1,48 +1,16 @@
-import { ScrollView, Text, View, TouchableOpacity } from "react-native";
-
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { MaterialIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
+import { useLibrary } from "@/lib/library-store";
 
-/**
- * Home Screen - NativeWind Example
- *
- * This template uses NativeWind (Tailwind CSS for React Native).
- * You can use familiar Tailwind classes directly in className props.
- *
- * Key patterns:
- * - Use `className` instead of `style` for most styling
- * - Theme colors: use tokens directly (bg-background, text-foreground, bg-primary, etc.); no dark: prefix needed
- * - Responsive: standard Tailwind breakpoints work on web
- * - Custom colors defined in tailwind.config.js
- */
 export default function HomeScreen() {
-  return (
-    <ScreenContainer className="p-6">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 gap-8">
-          {/* Hero Section */}
-          <View className="items-center gap-2">
-            <Text className="text-4xl font-bold text-foreground">Welcome</Text>
-            <Text className="text-base text-muted text-center">
-              Edit app/(tabs)/index.tsx to get started
-            </Text>
-          </View>
-
-          {/* Example Card */}
-          <View className="w-full max-w-sm self-center bg-surface rounded-2xl p-6 shadow-sm border border-border">
-            <Text className="text-lg font-semibold text-foreground mb-2">NativeWind Ready</Text>
-            <Text className="text-sm text-muted leading-relaxed">
-              Use Tailwind CSS classes directly in your React Native components.
-            </Text>
-          </View>
-
-          {/* Example Button */}
-          <View className="items-center">
-            <TouchableOpacity className="bg-primary px-6 py-3 rounded-full active:opacity-80">
-              <Text className="text-background font-semibold">Get Started</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </ScreenContainer>
-  );
+  const router = useRouter();
+  const { books, loans } = useLibrary();
+  const available = books.filter((book) => book.available).length;
+  const activeLoans = loans.filter((loan) => !loan.returnedAt).length;
+  return <ScreenContainer className="bg-[#F4F2EA]" containerClassName="bg-[#F4F2EA]"><ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 36 }}><View className="flex-row items-center justify-between mb-7"><View><Text className="text-[#6B7C70] text-xs font-bold tracking-[2px]">COLÉGIO ESTADUAL CÍVICO-MILITAR</Text><Text className="text-[#163A2B] text-2xl font-bold mt-1">Biblioteca Dom Bosco</Text></View><View className="w-12 h-12 rounded-2xl bg-[#D7E7D9] items-center justify-center"><MaterialIcons name="local-library" size={26} color="#163A2B" /></View></View><View className="bg-[#163A2B] rounded-[30px] p-6 overflow-hidden"><Text className="text-[#CFE6D7] text-xs font-bold tracking-widest">ACERVO DIGITAL</Text><Text className="text-white text-3xl font-bold mt-2 leading-9">Conhecimento que circula.</Text><Text className="text-[#CFE6D7] mt-3 leading-5">Cadastre, encontre e acompanhe cada livro da nossa biblioteca.</Text><Pressable onPress={() => router.push("/novo-livro" as any)} style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]} className="bg-[#D8EBD9] rounded-2xl px-4 py-3.5 flex-row items-center self-start mt-5"><MaterialIcons name="photo-camera" size={18} color="#163A2B" /><Text className="text-[#163A2B] font-bold ml-2">Cadastrar por foto</Text></Pressable></View><Text className="text-[#294B39] font-bold text-lg mt-7 mb-3">Visão geral</Text><View className="flex-row gap-3"><Stat label="Livros" value={books.length} icon="menu-book" /><Stat label="Disponíveis" value={available} icon="check-circle" /><Stat label="Emprestados" value={activeLoans} icon="sync-alt" /></View><View className="flex-row items-center justify-between mt-8 mb-3"><Text className="text-[#294B39] font-bold text-lg">Acesso rápido</Text></View><View className="flex-row gap-3"><QuickAction title="Consultar acervo" subtitle="Encontre um título" icon="search" onPress={() => router.push("/(tabs)/acervo" as any)} /><QuickAction title="Devoluções" subtitle="Atualize movimentações" icon="assignment-return" onPress={() => router.push("/(tabs)/movimentos" as any)} /></View><View className="bg-[#E4EDE4] rounded-3xl p-5 mt-5 flex-row"><MaterialIcons name="lightbulb-outline" size={22} color="#52705D" /><View className="flex-1 ml-3"><Text className="text-[#315843] font-bold">Dica para catalogação</Text><Text className="text-[#52705D] text-sm leading-5 mt-1">Fotografe a capa em um local bem iluminado e confirme os dados antes de salvar.</Text></View></View></ScrollView></ScreenContainer>;
 }
+
+function Stat({ label, value, icon }: { label: string; value: number; icon: keyof typeof MaterialIcons.glyphMap }) { return <View className="flex-1 bg-white rounded-3xl p-4 border border-[#E2E7E1]"><MaterialIcons name={icon} size={21} color="#52705D" /><Text className="text-[#163A2B] text-2xl font-bold mt-3">{value}</Text><Text className="text-[#6B7C70] text-xs mt-1">{label}</Text></View>; }
+function QuickAction({ title, subtitle, icon, onPress }: { title: string; subtitle: string; icon: keyof typeof MaterialIcons.glyphMap; onPress: () => void }) { return <Pressable onPress={onPress} style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]} className="flex-1 bg-white rounded-3xl p-4 border border-[#E2E7E1]"><View className="w-9 h-9 rounded-xl bg-[#E4EDE4] items-center justify-center"><MaterialIcons name={icon} size={20} color="#315843" /></View><Text className="text-[#163A2B] font-bold mt-4">{title}</Text><Text className="text-[#6B7C70] text-xs mt-1">{subtitle}</Text></Pressable>; }
