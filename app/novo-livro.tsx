@@ -13,6 +13,7 @@ export default function NewBookScreen() {
   const router = useRouter();
   const { addBook } = useLibrary();
   const [coverUri, setCoverUri] = useState<string>();
+  const [showPhotoOptions, setShowPhotoOptions] = useState(false);
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [category, setCategory] = useState("Literatura");
@@ -22,6 +23,7 @@ export default function NewBookScreen() {
   async function pickFromLibrary() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [3, 4], quality: 0.85 });
     if (!result.canceled) setCoverUri(result.assets[0].uri);
+    setShowPhotoOptions(false);
   }
 
   async function takePhoto() {
@@ -32,14 +34,11 @@ export default function NewBookScreen() {
     }
     const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [3, 4], quality: 0.85 });
     if (!result.canceled) setCoverUri(result.assets[0].uri);
+    setShowPhotoOptions(false);
   }
 
   function chooseCover() {
-    Alert.alert("Adicionar foto da capa", "Escolha como deseja registrar a imagem.", [
-      { text: "Tirar foto", onPress: takePhoto },
-      { text: "Escolher da galeria", onPress: pickFromLibrary },
-      { text: "Cancelar", style: "cancel" },
-    ]);
+    setShowPhotoOptions((current) => !current);
   }
 
   function save() {
@@ -67,9 +66,10 @@ export default function NewBookScreen() {
             <Text className="text-[#CFE6D7] mt-2 leading-5">Fotografe a capa e revise as informações antes de salvar.</Text>
           </View>
 
-          <Pressable onPress={chooseCover} style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]} className="mb-5">
+          <Pressable onPress={chooseCover} style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]} className="mb-3">
             {coverUri ? <Image source={{ uri: coverUri }} className="w-full h-52 rounded-3xl" resizeMode="cover" /> : <View className="h-52 rounded-3xl border-2 border-dashed border-[#A9B9AD] bg-[#E7EEE8] items-center justify-center"><View className="w-14 h-14 rounded-full bg-[#CFE6D7] items-center justify-center"><MaterialIcons name="photo-camera" size={28} color={green} /></View><Text className="text-[#163A2B] font-bold mt-3">Adicionar foto da capa</Text><Text className="text-[#6B7C70] text-xs mt-1">Câmera ou galeria</Text></View>}
           </Pressable>
+          {showPhotoOptions && <View className="flex-row gap-3 mb-5"><Pressable onPress={takePhoto} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]} className="flex-1 bg-[#163A2B] rounded-2xl py-3.5 flex-row items-center justify-center"><MaterialIcons name="photo-camera" size={18} color="white" /><Text className="text-white font-bold ml-2">Tirar foto</Text></Pressable><Pressable onPress={pickFromLibrary} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]} className="flex-1 bg-[#DDEBE0] rounded-2xl py-3.5 flex-row items-center justify-center"><MaterialIcons name="photo-library" size={18} color="#163A2B" /><Text className="text-[#163A2B] font-bold ml-2">Galeria</Text></Pressable></View>}
           {coverUri && <Text className="text-[#53705D] text-xs mb-4">Foto adicionada. Revise os dados abaixo antes de salvar.</Text>}
 
           <Field label="Título do livro" value={title} onChangeText={setTitle} placeholder="Ex.: O Pequeno Príncipe" />
