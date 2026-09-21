@@ -6,6 +6,8 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useLibrary } from "@/lib/library-store";
 import { isValidIsbn, lookupBookByIsbn, readIsbnFromImage, type CatalogBook } from "@/lib/catalog-lookup";
+import { prepareBookImage, readBarcodeFromImage } from "@/lib/book-image";
+import type { ImagePickerAsset } from "expo-image-picker";
 
 const green = "#163A2B";
 const mint = "#CFE6D7";
@@ -25,19 +27,32 @@ export default function NewBookScreen() {
   const [isReading, setIsReading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  async function processImage(uri: string) {
-    setCoverUri(uri);
+  async function processImage(asset: ImagePickerAsset) {
     setShowPhotoOptions(false);
-    if (Platform.OS !== "web") {
-      setCatalogMessage("Foto adicionada. Informe o ISBN abaixo para preencher os dados automaticamente.");
+    setIsReading(true);
+    setCatalogMessage("Preparando a foto para o acervo...");
+    let persistentUri: string;
+    try {
+      persistentUri = await prepareBookImage(asset);
+      setCoverUri(persistentUri);
+    } catch {
+      setCatalogMessage("Não foi possível preparar a foto. Tente novamente com outra imagem.");
+      setIsReading(false);
       return;
     }
-    setIsReading(true);
-    setCatalogMessage("Lendo a imagem para localizar o ISBN...");
+    if (Platform.OS !== "web") {
+      setCatalogMessage("Foto adicionada. Informe o ISBN abaixo para preencher os dados automaticamente.");
+      setIsReading(false);
+      return;
+    }
+    setCatalogMessage("Procurando o código de barras ISBN...");
     try {
-      const detectedIsbn = await readIsbnFromImage(uri);
+      const barcodeIsbn = await readBarcodeFromImage(persistentUri);
+      const detectedIsbn = barcodeIsbn ?? await readIsbnFromImage(persistentUri, (progress) => {
+        setCatalogMessage(`Lendo os números do ISBN... ${Math.round(progress * 100)}%`);
+      });
       if (!detectedIsbn) {
-        setCatalogMessage("Não encontrei um ISBN legível. Tente a contracapa com mais luz ou informe o ISBN manualmente.");
+        setCatalogMessage("Não encontrei um ISBN legível. Fotografe a contracapa inteira, sem reflexos, ou informe o número manualmente.");
         return;
       }
       setIsbn(detectedIsbn);
@@ -50,8 +65,8 @@ export default function NewBookScreen() {
   }
 
   async function pickFromLibrary() {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [3, 4], quality: 0.85 });
-    if (!result.canceled) await processImage(result.assets[0].uri);
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: false, quality: 0.8, base64: Platform.OS !== "web" });
+    if (!result.canceled) await processImage(result.assets[0]);
   }
 
   async function takePhoto() {
@@ -60,8 +75,8 @@ export default function NewBookScreen() {
       Alert.alert("Permissão necessária", "Autorize o acesso à câmera para fotografar a capa ou contracapa do livro.");
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [3, 4], quality: 0.85 });
-    if (!result.canceled) await processImage(result.assets[0].uri);
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: false, quality: 0.8, base64: Platform.OS !== "web" });
+    if (!result.canceled) await processImage(result.assets[0]);
   }
 
   function chooseCover() {
