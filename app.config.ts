@@ -25,6 +25,7 @@ const bundleId =
 // e.g., "space.manus.my.app.t20240115103045" -> "manus20240115103045"
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
+const baseUrl = process.env.EXPO_PUBLIC_BASE_URL?.replace(/^\/+|\/+$/g, "");
 
 const env = {
   // App branding - update these values directly (do not use env vars)
@@ -131,6 +132,7 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
+    baseUrl: baseUrl || undefined,
   },
 };
 
