@@ -29,6 +29,7 @@
     "@trpc/react-query": "11.7.2",
     "@trpc/server": "11.7.2",
     "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "axios": "^1.13.2",
     "clsx": "^2.1.1",
     "cookie": "^1.1.1",

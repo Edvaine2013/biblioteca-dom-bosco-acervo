@@ -47,8 +47,8 @@ export default function NewBookScreen() {
     }
     setCatalogMessage("Procurando o código de barras ISBN...");
     try {
-      const barcodeIsbn = await readBarcodeFromImage(persistentUri);
-      const detectedIsbn = barcodeIsbn ?? await readIsbnFromImage(persistentUri, (progress) => {
+      const barcodeIsbn = await readBarcodeFromImage(asset.uri);
+      const detectedIsbn = barcodeIsbn ?? await readIsbnFromImage(asset.uri, (progress) => {
         setCatalogMessage(`Lendo os números do ISBN... ${Math.round(progress * 100)}%`);
       });
       if (!detectedIsbn) {
@@ -92,7 +92,7 @@ export default function NewBookScreen() {
     try {
       const book = await lookupBookByIsbn(value);
       if (!book) {
-        setCatalogMessage("ISBN não encontrado no Open Library. Revise o número ou preencha os campos manualmente.");
+        setCatalogMessage("ISBN não encontrado nas fontes bibliográficas. Revise o número ou preencha os campos manualmente.");
         return;
       }
       applyCatalog(book);
