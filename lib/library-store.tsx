@@ -24,7 +24,8 @@ export type Loan = {
 type LibraryContextValue = {
   books: Book[];
   loans: Loan[];
-  addBook: (book: Omit<Book, "id" | "available">) => void;
+  hydrated: boolean;
+  addBook: (book: Omit<Book, "id" | "available">) => Promise<Book>;
   borrowBook: (bookId: string, borrower?: string) => void;
   returnBook: (loanId: string) => void;
 };
@@ -75,7 +76,14 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<LibraryContextValue>(() => ({
     books,
     loans,
-    addBook: (book) => setBooks((current) => addBookToCollection(current, book)),
+    hydrated,
+    addBook: async (book) => {
+      const addedBook = addBookToCollection(books, book)[0];
+      const nextBooks = [addedBook, ...books];
+      setBooks(nextBooks);
+      if (hydrated) await AsyncStorage.setItem(BOOKS_KEY, JSON.stringify(nextBooks));
+      return addedBook;
+    },
     borrowBook: (bookId, borrower = "Leitor não identificado") => {
       const borrowedAt = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).replace(" de ", " ");
       setBooks((current) => markBookBorrowed(current, bookId));
@@ -87,7 +95,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       setBooks((current) => markBookReturned(current, loan.bookId));
       setLoans((current) => current.map((item) => item.id === loanId ? { ...item, returnedAt: "agora" } : item));
     },
-  }), [books, loans]);
+  }), [books, loans, hydrated]);
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
 }
