@@ -26,6 +26,7 @@ export default function NewBookScreen() {
   const [catalogMessage, setCatalogMessage] = useState("Fotografe a capa ou contracapa para tentar identificar o ISBN automaticamente.");
   const [isReading, setIsReading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
   async function processImage(asset: ImagePickerAsset) {
     setShowPhotoOptions(false);
@@ -123,10 +124,12 @@ export default function NewBookScreen() {
     setIsSaving(true);
     try {
       await addBook({ title: title.trim(), author: author.trim(), category: category.trim() || "Sem categoria", year: year.trim() || "—", shelf: shelf.trim() || "A definir", coverUri });
-      router.replace("/(tabs)/acervo" as any);
+      setIsSaving(false);
+      setIsSaved(true);
+      setCatalogMessage("Livro salvo com sucesso no acervo.");
+      setTimeout(() => router.replace("/(tabs)/acervo" as any), 1200);
     } catch {
       Alert.alert("Não foi possível salvar", "Verifique o armazenamento do dispositivo e tente novamente.");
-    } finally {
       setIsSaving(false);
     }
   }
@@ -160,7 +163,20 @@ export default function NewBookScreen() {
           <View className="flex-row gap-3"><View className="flex-1"><Field label="Categoria" value={category} onChangeText={setCategory} placeholder="Literatura" /></View><View className="w-24"><Field label="Ano" value={year} onChangeText={setYear} placeholder="2026" keyboardType="number-pad" /></View></View>
           <Field label="Localização" value={shelf} onChangeText={setShelf} placeholder="Ex.: Estante A-01" />
 
-          <Pressable disabled={isSaving || isReading || !hydrated} onPress={save} style={({ pressed }) => [{ backgroundColor: isSaving || isReading || !hydrated ? "#8BA294" : green, transform: [{ scale: pressed ? 0.98 : 1 }] }]} className="rounded-2xl py-4 items-center mt-4 flex-row justify-center"><Text className="text-white font-bold text-base">{isSaving ? "Salvando..." : "Salvar no acervo"}</Text>{isSaving && <ActivityIndicator color="white" size="small" className="ml-2" />}</Pressable>
+          <View className="flex-row items-center gap-3 mt-4">
+            <Pressable
+              disabled={isSaving || isReading || !hydrated || isSaved}
+              onPress={save}
+              accessibilityLabel="Salvar livro no acervo"
+              style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}
+              className={`flex-1 rounded-2xl py-4 border items-center flex-row justify-center shadow-lg ${isSaved ? "bg-[#2F7A4B] border-[#25643D]" : isSaving || isReading || !hydrated ? "bg-[#B8A77D] border-[#9C8A62]" : "bg-[#D99A24] border-[#B9780C]"}`}
+            >
+              <MaterialIcons name={isSaved ? "check-circle" : "library-add"} size={20} color={isSaved ? "white" : green} />
+              <Text className={`font-bold text-base ml-2 ${isSaved ? "text-white" : "text-[#163A2B]"}`}>{isSaved ? "Livro salvo" : isSaving ? "Salvando..." : "Salvar no acervo"}</Text>
+              {isSaving && <ActivityIndicator color={green} size="small" className="ml-2" />}
+            </Pressable>
+            {isSaved && <View accessibilityLabel="Livro salvo com sucesso" className="w-14 h-14 rounded-2xl bg-[#2F7A4B] items-center justify-center border border-[#25643D]"><Text className="text-white text-3xl font-bold">✓</Text></View>}
+          </View>
           <Text className="text-center text-[#6B7C70] text-xs mt-4 leading-5">A foto e os dados catalogados ficam vinculados ao registro para facilitar a conferência física.</Text>
         </ScrollView>
       </KeyboardAvoidingView>
