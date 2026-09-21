@@ -35,7 +35,7 @@ jobs:
 
       - name: Export web app
         env:
-          EXPO_PUBLIC_BASE_URL: biblioteca-dom-bosco-acervo
+          EXPO_PUBLIC_BASE_URL: /biblioteca-dom-bosco-acervo
         run: pnpm exec expo export --platform web --output-dir dist
 
       - name: Publish to GitHub Pages
