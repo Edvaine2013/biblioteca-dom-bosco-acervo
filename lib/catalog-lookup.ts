@@ -1,5 +1,3 @@
-import { Platform } from "react-native";
-import { createOcrImageVariants } from "@/lib/book-image";
 import { mergeCatalogBooks, usefulCategory, type CatalogBook } from "@/lib/catalog-merge";
 import { extractIsbn, isValidIsbn } from "@/lib/isbn";
 export { extractIsbn, isValidIsbn } from "@/lib/isbn";
@@ -87,33 +85,4 @@ export async function lookupBookByIsbn(isbn: string): Promise<CatalogBook | null
   ]);
   const entries = results.map((result) => result.status === "fulfilled" ? result.value : null);
   return mergeCatalogBooks(normalized, entries);
-}
-
-export async function readIsbnFromImage(imageUri: string, onProgress?: (progress: number) => void) {
-  if (Platform.OS !== "web") {
-    throw new Error("A leitura automática da imagem está disponível no site web. No aplicativo móvel, informe o ISBN manualmente.");
-  }
-  const [{ createWorker }, variants] = await Promise.all([
-    import("tesseract.js"),
-    createOcrImageVariants(imageUri),
-  ]);
-  const worker = await createWorker("eng", 1, {
-    logger: (message) => {
-      if (message.status === "recognizing text") onProgress?.(message.progress);
-    },
-  });
-  try {
-    await worker.setParameters({
-      tessedit_char_whitelist: "ISBNisbn0123456789Xx- ",
-      preserve_interword_spaces: "1",
-    });
-    for (const variant of variants) {
-      const result = await worker.recognize(variant);
-      const detected = extractIsbn(result.data.text);
-      if (detected) return detected;
-    }
-    return undefined;
-  } finally {
-    await worker.terminate();
-  }
 }
