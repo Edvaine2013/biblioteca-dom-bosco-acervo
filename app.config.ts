@@ -88,6 +88,13 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     [
+      "expo-camera",
+      {
+        cameraPermission: "Permita o acesso à câmera para ler o código de barras ISBN.",
+        microphonePermission: "Permita o acesso ao microfone para recursos de vídeo da câmera.",
+      },
+    ],
+    [
       "expo-image-picker",
       {
         photosPermission: "Permita o acesso às fotos para registrar a capa do livro.",

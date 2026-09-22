@@ -23,6 +23,12 @@ type GoogleBook = {
   };
 };
 
+export const CATALOG_SOURCES = [
+  "CBL Serviços via BrasilAPI",
+  "Google Books",
+  "Open Library",
+] as const;
+
 async function lookupBrasilApi(isbn: string): Promise<CatalogBook | null> {
   const response = await fetch(`https://brasilapi.com.br/api/isbn/v1/${encodeURIComponent(isbn)}?providers=cbl,mercado-editorial,open-library,google-books`);
   if (response.status === 404 || response.status === 400) return null;

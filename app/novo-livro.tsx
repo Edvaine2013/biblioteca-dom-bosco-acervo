@@ -1,11 +1,12 @@
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Camera, CameraView, type BarcodeScanningResult } from "expo-camera";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useLibrary } from "@/lib/library-store";
-import { isValidIsbn, lookupBookByIsbn, readIsbnFromImage, type CatalogBook } from "@/lib/catalog-lookup";
+import { CATALOG_SOURCES, extractIsbn, isValidIsbn, lookupBookByIsbn, readIsbnFromImage, type CatalogBook } from "@/lib/catalog-lookup";
 import { prepareBookImage, readBarcodeFromImage } from "@/lib/book-image";
 import type { ImagePickerAsset } from "expo-image-picker";
 
@@ -27,6 +28,8 @@ export default function NewBookScreen() {
   const [isReading, setIsReading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerLocked, setScannerLocked] = useState(false);
 
   async function processImage(asset: ImagePickerAsset) {
     setShowPhotoOptions(false);
@@ -82,6 +85,29 @@ export default function NewBookScreen() {
 
   function chooseCover() {
     setShowPhotoOptions((current) => !current);
+  }
+
+  async function openScanner() {
+    if (Platform.OS !== "web") {
+      const permission = await Camera.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Permissão necessária", "Autorize o acesso à câmera para ler o código de barras ISBN.");
+        return;
+      }
+    }
+    setShowPhotoOptions(false);
+    setScannerLocked(false);
+    setShowScanner(true);
+  }
+
+  function handleBarcodeScanned({ data }: BarcodeScanningResult) {
+    if (scannerLocked) return;
+    const detectedIsbn = extractIsbn(data);
+    if (!detectedIsbn) return;
+    setScannerLocked(true);
+    setShowScanner(false);
+    setIsbn(detectedIsbn);
+    void fillFromCatalog(detectedIsbn);
   }
 
   async function fillFromCatalog(value = isbn) {
@@ -153,10 +179,11 @@ export default function NewBookScreen() {
           <Pressable onPress={chooseCover} style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]} className="mb-3">
             {coverUri ? <Image source={{ uri: coverUri }} className="w-full h-52 rounded-3xl" resizeMode="cover" /> : <View className="h-52 rounded-3xl border-2 border-dashed border-[#A9B9AD] bg-[#E7EEE8] items-center justify-center"><View className="w-14 h-14 rounded-full bg-[#CFE6D7] items-center justify-center"><MaterialIcons name="photo-camera" size={28} color={green} /></View><Text className="text-[#163A2B] font-bold mt-3">Adicionar foto da capa ou contracapa</Text><Text className="text-[#6B7C70] text-xs mt-1">A imagem será lida para localizar o ISBN</Text></View>}
           </Pressable>
+          <Pressable onPress={openScanner} style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]} className="mb-3 bg-[#D99A24] rounded-2xl py-3.5 flex-row items-center justify-center"><MaterialIcons name="qr-code-scanner" size={20} color={green} /><Text className="text-[#163A2B] font-bold ml-2">Ler código de barras ISBN</Text></Pressable>
           {showPhotoOptions && <View className="flex-row gap-3 mb-5"><Pressable onPress={takePhoto} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]} className="flex-1 bg-[#163A2B] rounded-2xl py-3.5 flex-row items-center justify-center"><MaterialIcons name="photo-camera" size={18} color="white" /><Text className="text-white font-bold ml-2">Tirar foto</Text></Pressable><Pressable onPress={pickFromLibrary} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]} className="flex-1 bg-[#DDEBE0] rounded-2xl py-3.5 flex-row items-center justify-center"><MaterialIcons name="photo-library" size={18} color="#163A2B" /><Text className="text-[#163A2B] font-bold ml-2">Galeria</Text></Pressable></View>}
           <View className="bg-[#E4EDE4] rounded-2xl p-3 mb-5 flex-row items-center"><MaterialIcons name={isReading ? "hourglass-top" : "auto-awesome"} size={18} color="#315843" /><Text className="flex-1 text-[#315843] text-xs leading-5 ml-2">{catalogMessage}</Text></View>
 
-          <View className="mb-4"><Text className="text-[#294B39] text-xs font-bold mb-2">ISBN (opcional)</Text><View className="flex-row gap-2"><TextInput value={isbn} onChangeText={setIsbn} placeholder="Ex.: 9788535914849" placeholderTextColor="#91A197" keyboardType="number-pad" className="flex-1 bg-white border border-[#D7E0D8] rounded-2xl px-4 py-3.5 text-[#163A2B]" /><Pressable disabled={isReading} onPress={() => fillFromCatalog()} className="bg-[#D8EBD9] rounded-2xl px-4 items-center justify-center"><Text className="text-[#163A2B] font-bold text-xs">Consultar</Text></Pressable></View></View>
+          <View className="mb-4"><Text className="text-[#294B39] text-xs font-bold mb-2">ISBN</Text><View className="flex-row gap-2"><TextInput value={isbn} onChangeText={setIsbn} placeholder="Digite 10 ou 13 dígitos" placeholderTextColor="#91A197" keyboardType="number-pad" className="flex-1 bg-white border border-[#D7E0D8] rounded-2xl px-4 py-3.5 text-[#163A2B]" /><Pressable disabled={isReading} onPress={() => fillFromCatalog()} className="bg-[#D8EBD9] rounded-2xl px-4 items-center justify-center"><Text className="text-[#163A2B] font-bold text-xs">Consultar</Text></Pressable></View><Text className="text-[#6B7C70] text-xs mt-2">Use o leitor ou informe o ISBN manualmente para buscar título, autor, ano e capa.</Text><Text className="text-[#8A968D] text-[11px] mt-1">Fontes: {CATALOG_SOURCES.join(" · ")}</Text></View>
 
           <Field label="Título do livro" value={title} onChangeText={setTitle} placeholder="Ex.: O Pequeno Príncipe" />
           <Field label="Autor(a)" value={author} onChangeText={setAuthor} placeholder="Ex.: Antoine de Saint-Exupéry" />
@@ -179,6 +206,22 @@ export default function NewBookScreen() {
           </View>
           <Text className="text-center text-[#6B7C70] text-xs mt-4 leading-5">A foto e os dados catalogados ficam vinculados ao registro para facilitar a conferência física.</Text>
         </ScrollView>
+        <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+          <View className="flex-1 bg-black">
+            <CameraView
+              style={{ flex: 1 }}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ["ean13", "ean8", "code128"] }}
+              onBarcodeScanned={scannerLocked ? undefined : handleBarcodeScanned}
+            >
+              <View className="flex-1 items-center justify-between p-6">
+                <View className="w-full flex-row justify-between items-center"><Text className="text-white text-lg font-bold">Ler ISBN</Text><Pressable onPress={() => setShowScanner(false)} className="bg-black/50 rounded-full px-4 py-2"><Text className="text-white font-bold">Fechar</Text></Pressable></View>
+                <View className="w-72 h-36 border-2 border-[#D99A24] rounded-2xl" />
+                <Text className="text-white text-center bg-black/60 rounded-xl px-4 py-3">Aponte para o código de barras ISBN na contracapa.</Text>
+              </View>
+            </CameraView>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </ScreenContainer>
   );
