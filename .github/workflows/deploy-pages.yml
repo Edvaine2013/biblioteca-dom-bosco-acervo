@@ -35,8 +35,11 @@ jobs:
 
       - name: Export web app
         env:
-          EXPO_PUBLIC_BASE_URL: /biblioteca-dom-bosco-acervo
+          EXPO_BASE_URL: biblioteca-dom-bosco-acervo
         run: pnpm exec expo export --platform web --output-dir dist
+
+      - name: Prepare GitHub Pages routes
+        run: node scripts/prepare-github-pages.mjs
 
       - name: Publish to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4

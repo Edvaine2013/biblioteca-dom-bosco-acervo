@@ -17,7 +17,11 @@ async function walk(directory) {
 }
 
 function prefixRootPaths(content) {
-  return content.replace(/(["'])\/(?![\/])/g, `$1/${base}/`);
+  return content
+    .replace(/(["'])\/(?![\/])/g, `$1/${base}/`)
+    .replaceAll(`/${base}/acervo"`, `/${base}/acervo/"`)
+    .replaceAll(`/${base}/movimentos"`, `/${base}/movimentos/"`)
+    .replaceAll(`/${base}/novo-livro"`, `/${base}/novo-livro/"`);
 }
 
 const files = await walk(dist);
