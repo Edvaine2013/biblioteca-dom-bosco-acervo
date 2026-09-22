@@ -24,7 +24,9 @@ export type Loan = {
 type LibraryContextValue = {
   books: Book[];
   loans: Loan[];
-  addBook: (book: Omit<Book, "id" | "available">) => void;
+  hydrated: boolean;
+  addBook: (book: Omit<Book, "id" | "available">) => Promise<Book>;
+  deleteBook: (bookId: string) => Promise<void>;
   borrowBook: (bookId: string, borrower?: string) => void;
   returnBook: (loanId: string) => void;
 };
@@ -57,6 +59,14 @@ export function markBookReturned(current: Book[], bookId: string): Book[] {
   return current.map((book) => book.id === bookId ? { ...book, available: true } : book);
 }
 
+export function removeBookFromCollection(current: Book[], bookId: string): Book[] {
+  return current.filter((book) => book.id !== bookId);
+}
+
+export function removeLoansForBook(current: Loan[], bookId: string): Loan[] {
+  return current.filter((loan) => loan.bookId !== bookId);
+}
+
 export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [books, setBooks] = useState<Book[]>(seedBooks);
   const [loans, setLoans] = useState<Loan[]>(seedLoans);
@@ -75,7 +85,26 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<LibraryContextValue>(() => ({
     books,
     loans,
-    addBook: (book) => setBooks((current) => addBookToCollection(current, book)),
+    hydrated,
+    addBook: async (book) => {
+      const addedBook = addBookToCollection(books, book)[0];
+      const nextBooks = [addedBook, ...books];
+      setBooks(nextBooks);
+      if (hydrated) await AsyncStorage.setItem(BOOKS_KEY, JSON.stringify(nextBooks));
+      return addedBook;
+    },
+    deleteBook: async (bookId) => {
+      const nextBooks = removeBookFromCollection(books, bookId);
+      const nextLoans = removeLoansForBook(loans, bookId);
+      setBooks(nextBooks);
+      setLoans(nextLoans);
+      if (hydrated) {
+        await Promise.all([
+          AsyncStorage.setItem(BOOKS_KEY, JSON.stringify(nextBooks)),
+          AsyncStorage.setItem(LOANS_KEY, JSON.stringify(nextLoans)),
+        ]);
+      }
+    },
     borrowBook: (bookId, borrower = "Leitor não identificado") => {
       const borrowedAt = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).replace(" de ", " ");
       setBooks((current) => markBookBorrowed(current, bookId));
@@ -87,7 +116,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       setBooks((current) => markBookReturned(current, loan.bookId));
       setLoans((current) => current.map((item) => item.id === loanId ? { ...item, returnedAt: "agora" } : item));
     },
-  }), [books, loans]);
+  }), [books, loans, hydrated]);
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
 }

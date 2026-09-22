@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addBookToCollection, getInitials, markBookBorrowed, markBookReturned, type Book } from "../lib/library-store";
+import { addBookToCollection, getInitials, markBookBorrowed, markBookReturned, removeBookFromCollection, removeLoansForBook, type Book, type Loan } from "../lib/library-store";
 
 const book: Omit<Book, "id" | "available"> = {
   title: "A Bolsa Amarela",
@@ -26,5 +26,12 @@ describe("regras do acervo", () => {
 
   it("gera iniciais para a identificação visual da capa", () => {
     expect(getInitials("O Pequeno Príncipe")).toBe("OP");
+  });
+
+  it("exclui o livro e suas movimentações associadas", () => {
+    const books: Book[] = [{ ...book, id: "test-1", available: false }];
+    const loans: Loan[] = [{ id: "loan-1", bookId: "test-1", borrower: "Aluno", borrowedAt: "hoje", dueAt: "amanhã" }];
+    expect(removeBookFromCollection(books, "test-1")).toEqual([]);
+    expect(removeLoansForBook(loans, "test-1")).toEqual([]);
   });
 });
