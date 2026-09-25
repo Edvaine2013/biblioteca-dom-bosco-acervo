@@ -1,9 +1,28 @@
-import { cp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 const root = new URL("../", import.meta.url).pathname;
 const dist = join(root, "dist");
 const base = "biblioteca-dom-bosco-acervo";
+
+/**
+ * ATENÇÃO: este script NÃO reescreve o conteúdo dos arquivos.
+ *
+ * O caminho base ("/biblioteca-dom-bosco-acervo") é aplicado pelo próprio Expo
+ * no `expo export`, via EXPO_PUBLIC_BASE_URL (app.config.ts -> experiments.baseUrl).
+ *
+ * Uma versão anterior deste script fazia um replace global de caminhos
+ * absolutos em .html/.js/.css e corrompia o bundle JavaScript: literais de
+ * regex como `.replace(/"/g, "&quot;")` viravam
+ * `.replace(/"/biblioteca-dom-bosco-acervo/g, ...)`, causando
+ * "SyntaxError: Invalid regular expression flags" e deixando o site publicado
+ * sem hidratação (abas e botões não respondiam).
+ *
+ * Aqui apenas replicamos as rotas estáticas exportadas em pastas com
+ * index.html, para que /acervo/, /movimentos/ e /novo-livro/ (com barra final)
+ * também sejam servidos pelo GitHub Pages.
+ */
+const routes = ["acervo", "movimentos", "novo-livro"];
 
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -16,22 +35,9 @@ async function walk(directory) {
   return files;
 }
 
-function prefixRootPaths(content) {
-  return content
-    .replace(/(["'])\/(?![\/])/g, `$1/${base}/`)
-    .replaceAll(`/${base}/acervo"`, `/${base}/acervo/"`)
-    .replaceAll(`/${base}/movimentos"`, `/${base}/movimentos/"`)
-    .replaceAll(`/${base}/novo-livro"`, `/${base}/novo-livro/"`);
-}
-
 const files = await walk(dist);
-for (const file of files) {
-  if (!/\.(html|js|css)$/.test(file)) continue;
-  const content = await readFile(file, "utf8");
-  await writeFile(file, prefixRootPaths(content));
-}
 
-for (const route of ["acervo", "movimentos", "novo-livro"]) {
+for (const route of routes) {
   const source = join(dist, `${route}.html`);
   const targetDirectory = join(dist, route);
   await mkdir(targetDirectory, { recursive: true });
@@ -39,4 +45,15 @@ for (const route of ["acervo", "movimentos", "novo-livro"]) {
 }
 
 await writeFile(join(dist, ".nojekyll"), "\n");
-console.log(`Prepared ${relative(root, dist)} for /${base}/`);
+
+// Verificação de sanidade: falha o deploy cedo se o caminho base não tiver
+// sido aplicado pelo Expo, evitando publicar um site sem CSS/JS em subpasta.
+const indexHtml = await readFile(join(dist, "index.html"), "utf8");
+if (!indexHtml.includes(`/${base}/_expo/`)) {
+  throw new Error(
+    `O caminho base /${base}/ não foi encontrado em dist/index.html. ` +
+      `Confirme que EXPO_PUBLIC_BASE_URL=/${base} foi definido antes do expo export.`
+  );
+}
+
+console.log(`Prepared ${relative(root, dist)} for /${base}/ (${files.length} arquivos verificados)`);

@@ -13,7 +13,14 @@ export default function NewBookScreen() {
   const router = useRouter();
   const { addBook, hydrated } = useLibrary();
   const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
   const [author, setAuthor] = useState("");
+  const [publisher, setPublisher] = useState("");
+  const [edition, setEdition] = useState("");
+  const [pages, setPages] = useState("");
+  const [language, setLanguage] = useState("");
+  const [description, setDescription] = useState("");
+  const [catalogSource, setCatalogSource] = useState("");
   const [category, setCategory] = useState("Literatura");
   const [year, setYear] = useState("");
   const [shelf, setShelf] = useState("");
@@ -76,7 +83,14 @@ export default function NewBookScreen() {
   function applyCatalog(book: CatalogBook) {
     if (book.isbn) setIsbn(book.isbn);
     if (book.title) setTitle(book.title);
+    setSubtitle(book.subtitle ?? "");
     if (book.author) setAuthor(book.author);
+    setPublisher(book.publisher ?? "");
+    setEdition(book.edition ?? "");
+    setPages(book.pages ? String(book.pages) : "");
+    setLanguage(book.language ?? "");
+    setDescription(book.description ?? "");
+    setCatalogSource(book.catalogSource ?? "");
     if (book.category) setCategory(book.category);
     if (book.year) setYear(book.year);
     if (book.coverUri) setCoverUri(book.coverUri);
@@ -97,7 +111,22 @@ export default function NewBookScreen() {
     }
     setIsSaving(true);
     try {
-      await addBook({ title: title.trim(), author: author.trim(), category: category.trim() || "Sem categoria", year: year.trim() || "—", shelf: shelf.trim() || "A definir", coverUri });
+      await addBook({
+        isbn: extractIsbn(isbn),
+        title: title.trim(),
+        subtitle: subtitle.trim() || undefined,
+        author: author.trim(),
+        publisher: publisher.trim() || undefined,
+        edition: edition.trim() || undefined,
+        pages: pages.trim() ? Number(pages.trim()) : undefined,
+        language: language.trim() || undefined,
+        description: description.trim() || undefined,
+        catalogSource,
+        category: category.trim() || "Sem categoria",
+        year: year.trim() || "—",
+        shelf: shelf.trim() || "A definir",
+        coverUri,
+      });
       setIsSaving(false);
       setIsSaved(true);
       setCatalogMessage("Livro salvo com sucesso no acervo.");
@@ -136,9 +165,13 @@ export default function NewBookScreen() {
           <View className="mb-4"><Text className="text-[#294B39] text-xs font-bold mb-2">ISBN</Text><View className="flex-row gap-2"><TextInput value={isbn} onChangeText={setIsbn} placeholder="Digite 10 ou 13 dígitos" placeholderTextColor="#91A197" keyboardType="number-pad" className="flex-1 bg-white border border-[#D7E0D8] rounded-2xl px-4 py-3.5 text-[#163A2B]" /><Pressable disabled={isReading} onPress={() => fillFromCatalog()} className="bg-[#D8EBD9] rounded-2xl px-4 items-center justify-center"><Text className="text-[#163A2B] font-bold text-xs">Consultar</Text></Pressable></View><Text className="text-[#6B7C70] text-xs mt-2">Cadastro manual: digite o ISBN e consulte para preencher os dados automaticamente.</Text><Text className="text-[#8A968D] text-[11px] mt-1">Fontes: {CATALOG_SOURCES.join(" · ")}</Text></View>
 
           <Field label="Título do livro" value={title} onChangeText={setTitle} placeholder="Ex.: O Pequeno Príncipe" />
+          <Field label="Subtítulo (opcional)" value={subtitle} onChangeText={setSubtitle} placeholder="Ex.: edição comentada" />
           <Field label="Autor(a)" value={author} onChangeText={setAuthor} placeholder="Ex.: Antoine de Saint-Exupéry" />
+          <Field label="Editora (opcional)" value={publisher} onChangeText={setPublisher} placeholder="Ex.: Companhia das Letras" />
+          <View className="flex-row gap-3"><View className="flex-1"><Field label="Edição (opcional)" value={edition} onChangeText={setEdition} placeholder="Ex.: 2ª" /></View><View className="flex-1"><Field label="Páginas (opcional)" value={pages} onChangeText={setPages} placeholder="Ex.: 96" keyboardType="number-pad" /></View><View className="flex-1"><Field label="Idioma (opcional)" value={language} onChangeText={setLanguage} placeholder="Ex.: por" /></View></View>
           <View className="flex-row gap-3"><View className="flex-1"><Field label="Categoria" value={category} onChangeText={setCategory} placeholder="Literatura" /></View><View className="w-24"><Field label="Ano" value={year} onChangeText={setYear} placeholder="2026" keyboardType="number-pad" /></View></View>
           <Field label="Localização" value={shelf} onChangeText={setShelf} placeholder="Ex.: Estante A-01" />
+          {description ? <View className="bg-white border border-[#D7E0D8] rounded-2xl p-4 mb-4"><Text className="text-[#294B39] text-xs font-bold mb-2">Sinopse {catalogSource ? `· ${catalogSource}` : ""}</Text><Text className="text-[#4E6357] text-sm leading-5">{description}</Text></View> : null}
 
           <View className="flex-row items-center gap-3 mt-4"><Pressable disabled={isSaving || isReading || !hydrated || isSaved} onPress={save} accessibilityLabel="Salvar livro no acervo" style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]} className={`flex-1 rounded-2xl py-4 border items-center flex-row justify-center shadow-lg ${isSaved ? "bg-[#2F7A4B] border-[#25643D]" : isSaving || isReading || !hydrated ? "bg-[#B8A77D] border-[#9C8A62]" : "bg-[#D99A24] border-[#B9780C]"}`}><MaterialIcons name={isSaved ? "check-circle" : "library-add"} size={20} color={isSaved ? "white" : green} /><Text className={`font-bold text-base ml-2 ${isSaved ? "text-white" : "text-[#163A2B]"}`}>{isSaved ? "Livro salvo" : isSaving ? "Salvando..." : "Salvar no acervo"}</Text>{isSaving && <ActivityIndicator color={green} size="small" className="ml-2" />}</Pressable>{isSaved && <View accessibilityLabel="Livro salvo com sucesso" className="w-14 h-14 rounded-2xl bg-[#2F7A4B] items-center justify-center border border-[#25643D]"><Text className="text-white text-3xl font-bold">✓</Text></View>}</View>
           <Text className="text-center text-[#6B7C70] text-xs mt-4 leading-5">O cadastro utiliza exclusivamente o ISBN e os dados retornados pelos catálogos selecionados.</Text>

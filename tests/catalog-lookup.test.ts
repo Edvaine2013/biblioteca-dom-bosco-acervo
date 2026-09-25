@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { extractIsbn, isValidIsbn } from "../lib/isbn";
-import { mergeCatalogBooks } from "../lib/catalog-merge";
+import { mergeCatalogBooks, usefulCategory } from "../lib/catalog-merge";
 
 describe("leitura de ISBN", () => {
   it("extrai ISBN-13 com espaços e hífens", () => {
@@ -34,5 +34,36 @@ describe("leitura de ISBN", () => {
       category: "Literatura",
       coverUri: "https://example.com/capa.jpg",
     });
+  });
+});
+
+describe("mapeamento dos catálogos", () => {
+  it("rejeita marcadores de série da Open Library como categoria", () => {
+    expect(usefulCategory("series:Harry_Potter", "Harry Potter e a pedra filosofal")).toBeUndefined();
+    expect(usefulCategory("Literatura", "1984")).toBe("Literatura");
+  });
+  it("preserva os metadados enriquecidos de todas as fontes no merge", () => {
+    expect(mergeCatalogBooks("9788535914849", [
+      { title: "1984", pages: 416, catalogSource: "BrasilAPI" },
+      { subtitle: "edição definitiva", publisher: "Companhia das Letras", language: "por", description: "Distopia clássica." },
+      { pages: 0, author: "George Orwell" },
+    ])).toEqual({
+      isbn: "9788535914849",
+      title: "1984",
+      subtitle: "edição definitiva",
+      author: "George Orwell",
+      publisher: "Companhia das Letras",
+      edition: undefined,
+      year: undefined,
+      pages: 416,
+      language: "por",
+      category: undefined,
+      description: "Distopia clássica.",
+      coverUri: undefined,
+      catalogSource: "BrasilAPI",
+    });
+  });
+  it("ignora contagem de páginas zerada vinda de catálogo", () => {
+    expect(mergeCatalogBooks("9788506058589", [{ title: "Dicionário", pages: undefined }])?.pages).toBeUndefined();
   });
 });

@@ -3,8 +3,16 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 
 export type Book = {
   id: string;
+  isbn?: string;
   title: string;
+  subtitle?: string;
   author: string;
+  publisher?: string;
+  edition?: string;
+  pages?: number;
+  language?: string;
+  description?: string;
+  catalogSource?: string;
   category: string;
   year: string;
   shelf: string;
@@ -15,6 +23,7 @@ export type Book = {
 export type Loan = {
   id: string;
   bookId: string;
+  copyBarcode?: string;
   borrower: string;
   borrowedAt: string;
   dueAt: string;
