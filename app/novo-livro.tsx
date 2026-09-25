@@ -1,4 +1,4 @@
-import { Camera, CameraView, type BarcodeScanningResult } from "expo-camera";
+import { Camera } from "expo-camera";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -6,6 +6,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useLibrary } from "@/lib/library-store";
 import { notify } from "@/lib/dialogs";
+import { BarcodeScanner } from "@/lib/barcode-scanner";
 import { CATALOG_SOURCES, extractIsbn, isValidIsbn, lookupBookByIsbn, type CatalogBook } from "@/lib/catalog-lookup";
 
 const green = "#163A2B";
@@ -46,11 +47,11 @@ export default function NewBookScreen() {
     setShowScanner(true);
   }
 
-  function handleBarcodeScanned({ data }: BarcodeScanningResult) {
+  function handleBarcodeScanned(data: string) {
     if (scannerLocked) return;
     const detectedIsbn = extractIsbn(data);
     if (!detectedIsbn) {
-      setCatalogMessage("O código lido não é um ISBN válido. Aponte para um código EAN-13 da contracapa.");
+      setCatalogMessage(`Código lido (${data}) não é um ISBN válido. Aponte para o código EAN-13 da contracapa.`);
       return;
     }
     setScannerLocked(true);
@@ -178,7 +179,17 @@ export default function NewBookScreen() {
           <Text className="text-center text-[#6B7C70] text-xs mt-4 leading-5">O cadastro utiliza exclusivamente o ISBN e os dados retornados pelos catálogos selecionados.</Text>
         </ScrollView>
         <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
-          <View className="flex-1 bg-black"><CameraView style={{ flex: 1 }} facing="back" barcodeScannerSettings={{ barcodeTypes: ["ean13", "ean8", "code128"] }} onBarcodeScanned={scannerLocked ? undefined : handleBarcodeScanned}><View className="flex-1 items-center justify-between p-6"><View className="w-full flex-row justify-between items-center"><Text className="text-white text-lg font-bold">Ler ISBN</Text><Pressable onPress={() => setShowScanner(false)} className="bg-black/50 rounded-full px-4 py-2"><Text className="text-white font-bold">Fechar</Text></Pressable></View><View className="w-72 h-36 border-2 border-[#D99A24] rounded-2xl" /><Text className="text-white text-center bg-black/60 rounded-xl px-4 py-3">Aponte para o código de barras ISBN na contracapa.</Text></View></CameraView></View>
+          <View className="flex-1 bg-black">
+            <BarcodeScanner formats={["ean13", "ean8", "code128"]} active={!scannerLocked} onScanned={handleBarcodeScanned} onError={(reason) => setCatalogMessage(reason)} />
+            <View className="absolute inset-0 items-center justify-between p-6" pointerEvents="box-none">
+              <View className="w-full flex-row justify-between items-center">
+                <Text className="text-white text-lg font-bold">Ler ISBN</Text>
+                <Pressable onPress={() => setShowScanner(false)} className="bg-black/50 rounded-full px-4 py-2"><Text className="text-white font-bold">Fechar</Text></Pressable>
+              </View>
+              <View className="w-72 h-36 border-2 border-[#D99A24] rounded-2xl" pointerEvents="none" />
+              <Text className="text-white text-center bg-black/60 rounded-xl px-4 py-3">Aponte para o código de barras ISBN na contracapa.</Text>
+            </View>
+          </View>
         </Modal>
       </KeyboardAvoidingView>
     </ScreenContainer>
