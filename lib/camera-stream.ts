@@ -5,11 +5,13 @@
  * `CameraView`, então aqui não há nada a fazer. A implementação real, usada
  * pelo navegador, está em `camera-stream.web.ts`.
  */
+import type { CameraErrorInfo } from "@/lib/camera-errors";
+
 export type CameraStream = null;
 
 export type CameraStreamResult =
   | { ok: true; stream: CameraStream }
-  | { ok: false; message: string };
+  | { ok: false; issue: CameraErrorInfo };
 
 export async function acquireCameraStream(): Promise<CameraStreamResult> {
   return { ok: true, stream: null };

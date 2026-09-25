@@ -8,6 +8,8 @@ import { useLibrary } from "@/lib/library-store";
 import { notify } from "@/lib/dialogs";
 import { BarcodeScanner } from "@/lib/barcode-scanner";
 import { acquireCameraStream, getCameraPermissionState, releaseCameraStream, type CameraStream } from "@/lib/camera-stream";
+import { decodeBarcodePhoto, pickBarcodePhoto } from "@/lib/barcode-photo";
+import type { CameraErrorInfo } from "@/lib/camera-errors";
 import { CATALOG_SOURCES, explainIsbnIssue, isValidIsbn, lookupBookByIsbn, readIsbn, toIsbn13, type CatalogBook } from "@/lib/catalog-lookup";
 
 const green = "#163A2B";
@@ -36,7 +38,8 @@ export default function NewBookScreen() {
   const [showScanner, setShowScanner] = useState(false);
   const [scannerLocked, setScannerLocked] = useState(false);
   const [cameraStream, setCameraStream] = useState<CameraStream>(null);
-  const [cameraBlocked, setCameraBlocked] = useState(false);
+  const [cameraIssue, setCameraIssue] = useState<CameraErrorInfo | null>(null);
+  const [isDecodingPhoto, setIsDecodingPhoto] = useState(false);
   const streamRef = useRef<CameraStream>(null);
 
   // Se a permissão já estiver bloqueada, avisa antes de o usuário tentar:
@@ -44,12 +47,28 @@ export default function NewBookScreen() {
   useEffect(() => {
     let active = true;
     void getCameraPermissionState().then((state) => {
-      if (active) setCameraBlocked(state === "denied");
+      if (!active) return;
+      if (state === "denied") {
+        setCameraIssue({
+          name: "NotAllowedError",
+          title: "A câmera está bloqueada para este site",
+          message:
+            "O navegador registrou uma recusa e não volta a perguntar sozinho. Libere em Permissões › Câmera › Permitir e depois recarregue a página. Enquanto isso, use “Ler de uma foto” ou digite o ISBN.",
+          permissionDenied: true,
+          needsReload: true,
+          canRetry: false,
+        });
+      }
     });
     return () => {
       active = false;
     };
   }, [showScanner]);
+
+  /** Recarrega a página: é o único jeito de o Chrome reler a autorização. */
+  const reloadForPermission = useCallback(() => {
+    if (Platform.OS === "web" && typeof window !== "undefined") window.location.reload();
+  }, []);
 
   const closeScanner = useCallback(() => {
     setShowScanner(false);
@@ -78,15 +97,46 @@ export default function NewBookScreen() {
     // causa do erro "Permissão de câmera negada").
     const result = await acquireCameraStream();
     if (!result.ok) {
-      setCatalogMessage(result.message);
-      setCameraBlocked(true);
-      notify("Não foi possível abrir a câmera", result.message);
+      setCameraIssue(result.issue);
+      setCatalogMessage(result.issue.message);
       return;
     }
     streamRef.current = result.stream;
+    setCameraIssue(null);
     setScannerLocked(false);
     setCameraStream(result.stream);
     setShowScanner(true);
+  }
+
+  /**
+   * Lê o código de uma foto da etiqueta.
+   *
+   * Caminho alternativo para quando o navegador bloqueia a câmera ao vivo: aqui
+   * quem tira a foto é o aplicativo de câmera do próprio celular, que já tem a
+   * autorização de sistema, e o site apenas decodifica a imagem.
+   */
+  async function readFromPhoto() {
+    if (isDecodingPhoto) return;
+    setIsDecodingPhoto(true);
+    setCatalogMessage("Abrindo a câmera do celular para a foto da etiqueta...");
+    try {
+      const file = await pickBarcodePhoto();
+      if (!file) {
+        setCatalogMessage("Nenhuma foto escolhida.");
+        return;
+      }
+      setCatalogMessage("Lendo o código de barras da foto...");
+      const reading = await decodeBarcodePhoto(file);
+      if (!reading.ok) {
+        setCatalogMessage(reading.message);
+        return;
+      }
+      handleBarcodeScanned(reading.code);
+    } catch {
+      setCatalogMessage("Não foi possível processar a foto. Tente novamente.");
+    } finally {
+      setIsDecodingPhoto(false);
+    }
   }
 
   function handleBarcodeScanned(data: string) {
@@ -213,7 +263,8 @@ export default function NewBookScreen() {
             <Text className="text-[#163A2B] font-bold mt-3">Leitor de código de barras ISBN</Text>
             <Text className="text-[#6B7C70] text-xs mt-1 text-center">Use a câmera apenas para ler o código ISBN, sem incluir foto do livro.</Text>
             <Pressable onPress={openScanner} style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]} className="mt-4 w-full bg-[#D99A24] rounded-2xl py-3.5 flex-row items-center justify-center"><MaterialIcons name="qr-code-scanner" size={20} color={green} /><Text className="text-[#163A2B] font-bold ml-2">Ler código de barras</Text></Pressable>
-            {cameraBlocked ? <View className="mt-3 bg-[#FFF4E5] border border-[#D99A24] rounded-2xl p-4"><Text className="text-[#8A5A00] text-xs font-bold mb-1">Câmera bloqueada para este site</Text><Text className="text-[#6B4A12] text-xs leading-5 mb-2">O navegador registrou uma recusa e não volta a perguntar sozinho. Para liberar no Android:</Text><Text className="text-[#6B4A12] text-xs leading-5">1. Toque no <Text className="font-bold">cadeado</Text> (ou no ícone antes do endereço) na barra do Chrome.</Text><Text className="text-[#6B4A12] text-xs leading-5 mt-1">2. Toque em <Text className="font-bold">Permissões</Text> › <Text className="font-bold">Câmera</Text> › <Text className="font-bold">Permitir</Text>.</Text><Text className="text-[#6B4A12] text-xs leading-5 mt-1">3. Recarregue a página e toque em “Ler código de barras” novamente.</Text><Text className="text-[#6B4A12] text-xs leading-5 mt-2">Se o passo 1 não resolver, o próprio sistema pode estar bloqueando: <Text className="font-bold">Ajustes</Text> › <Text className="font-bold">Apps</Text> › <Text className="font-bold">Gerenciar apps</Text> › <Text className="font-bold">Chrome</Text> › <Text className="font-bold">Permissões</Text> › <Text className="font-bold">Câmera</Text> › Permitir. No Xiaomi (MIUI), confira também o app <Text className="font-bold">Segurança</Text> › Permissões.</Text><Text className="text-[#6B4A12] text-xs leading-5 mt-2">Importante: abra o site pelo Chrome, e não por dentro do WhatsApp ou Instagram, que bloqueiam a câmera. Enquanto isso, você pode digitar o ISBN abaixo e tocar em “Consultar”.</Text></View> : null}
+            <Pressable disabled={isDecodingPhoto} onPress={readFromPhoto} style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]} className="mt-2 w-full bg-white border border-[#A9B9AD] rounded-2xl py-3.5 flex-row items-center justify-center"><MaterialIcons name={isDecodingPhoto ? "hourglass-top" : "photo-camera"} size={20} color={green} /><Text className="text-[#163A2B] font-bold ml-2">{isDecodingPhoto ? "Lendo a foto..." : "Ler de uma foto da etiqueta"}</Text></Pressable>
+            {cameraIssue ? <View className="mt-3 bg-[#FFF4E5] border border-[#D99A24] rounded-2xl p-4"><Text className="text-[#8A5A00] text-xs font-bold mb-1">{cameraIssue.title}</Text><Text className="text-[#6B4A12] text-xs leading-5">{cameraIssue.message}</Text>{cameraIssue.needsReload ? <><Text className="text-[#6B4A12] text-xs leading-5 mt-2">Para liberar no Chrome (Android): toque no <Text className="font-bold">cadeado</Text> na barra de endereços › <Text className="font-bold">Permissões</Text> › <Text className="font-bold">Câmera</Text> › <Text className="font-bold">Permitir</Text> › <Text className="font-bold">Recarregar</Text>.</Text><Text className="text-[#6B4A12] text-xs leading-5 mt-2">Se o cadeado não resolver, o próprio sistema pode estar bloqueando: <Text className="font-bold">Ajustes</Text> › <Text className="font-bold">Apps</Text> › <Text className="font-bold">Gerenciar apps</Text> › <Text className="font-bold">Chrome</Text> › <Text className="font-bold">Permissões</Text> › <Text className="font-bold">Câmera</Text> › Permitir. No Xiaomi (MIUI), confira também <Text className="font-bold">Segurança</Text> › Permissões.</Text><Pressable onPress={reloadForPermission} className="mt-3 bg-[#D99A24] rounded-xl py-3 items-center"><Text className="text-[#163A2B] font-bold text-xs">Recarregar e abrir a câmera</Text></Pressable></> : null}{cameraIssue.canRetry ? <Pressable onPress={openScanner} className="mt-3 bg-[#D99A24] rounded-xl py-3 items-center"><Text className="text-[#163A2B] font-bold text-xs">Tentar novamente</Text></Pressable> : null}<Text className="text-[#6B4A12] text-xs leading-5 mt-3">Enquanto isso, toque em <Text className="font-bold">Ler de uma foto da etiqueta</Text> — funciona em qualquer navegador — ou digite o ISBN abaixo e toque em “Consultar”.</Text></View> : null}
           </View>
 
           <View className="bg-[#E4EDE4] rounded-2xl p-3 mb-5 flex-row items-center"><MaterialIcons name={isReading ? "hourglass-top" : "auto-awesome"} size={18} color="#315843" /><Text className="flex-1 text-[#315843] text-xs leading-5 ml-2">{catalogMessage}</Text></View>
