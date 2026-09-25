@@ -12,12 +12,14 @@ import { describeCameraError } from "../lib/camera-errors";
 describe("mensagens de erro da câmera", () => {
   it("ensina a desbloquear quando a permissão foi negada", () => {
     const message = describeCameraError("NotAllowedError");
-    expect(message).toMatch(/AA|cadeado|barra de endereços/i);
-    expect(message).toMatch(/permita a câmera/i);
+    // A mensagem precisa indicar o caminho de desbloqueio no Chrome/Android.
+    expect(message).toMatch(/cadeado/i);
+    expect(message).toMatch(/Permissões/i);
+    expect(message).toMatch(/Permitir/i);
   });
 
   it("trata também o caso de bloqueio por política de segurança", () => {
-    expect(describeCameraError("SecurityError")).toMatch(/AA|cadeado|barra de endereços/i);
+    expect(describeCameraError("SecurityError")).toMatch(/cadeado|barra de endereços/i);
   });
 
   it("distingue câmera ausente de câmera em uso por outro app", () => {

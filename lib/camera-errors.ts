@@ -9,7 +9,7 @@ export function describeCameraError(errorName: string) {
   switch (errorName) {
     case "NotAllowedError":
     case "SecurityError":
-      return "O navegador bloqueou a câmera para este site. Para liberar: toque em “AA” ou no cadeado na barra de endereços e permita a câmera. No iPhone, confira também em Ajustes › Safari › Câmera. Depois toque em “Ler código de barras” de novo.";
+      return "A câmera está bloqueada para este site. No Chrome (Android), toque no cadeado na barra de endereços › Permissões › Câmera › Permitir, recarregue a página e toque em “Ler código de barras” de novo.";
     case "NotFoundError":
     case "OverconstrainedError":
       return "Nenhuma câmera compatível foi encontrada neste dispositivo.";
