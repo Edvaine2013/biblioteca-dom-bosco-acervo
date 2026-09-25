@@ -3,12 +3,15 @@
  *
  * No nativo o `expo-camera` decodifica códigos de barras de verdade, então
  * basta o `CameraView`. A implementação para navegador — que precisa do ZXing,
- * porque o expo-camera na web só lê QR Code — está em `barcode-scanner.web.tsx`.
+ * porque o expo-camera na web só lê QR Code, e do stream obtido no gesto do
+ * usuário — está em `barcode-scanner.web.tsx`.
  */
 import { CameraView, type BarcodeScanningResult } from "expo-camera";
 import { StyleSheet, View } from "react-native";
 
 export type BarcodeScannerProps = {
+  /** Recebido do fluxo web; no nativo o `CameraView` cuida do stream. */
+  stream?: unknown;
   /** Formatos aceitos, nos mesmos nomes usados pelo expo-camera. */
   formats?: string[];
   /** Chamado a cada código lido, com o texto decodificado. */

@@ -1,12 +1,13 @@
 import { Camera } from "expo-camera";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useLibrary } from "@/lib/library-store";
 import { notify } from "@/lib/dialogs";
 import { BarcodeScanner } from "@/lib/barcode-scanner";
+import { acquireCameraStream, getCameraPermissionState, releaseCameraStream, type CameraStream } from "@/lib/camera-stream";
 import { CATALOG_SOURCES, extractIsbn, isValidIsbn, lookupBookByIsbn, type CatalogBook } from "@/lib/catalog-lookup";
 
 const green = "#163A2B";
@@ -34,6 +35,31 @@ export default function NewBookScreen() {
   const [isSaved, setIsSaved] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [scannerLocked, setScannerLocked] = useState(false);
+  const [cameraStream, setCameraStream] = useState<CameraStream>(null);
+  const [cameraBlocked, setCameraBlocked] = useState(false);
+  const streamRef = useRef<CameraStream>(null);
+
+  // Se a permissão já estiver bloqueada, avisa antes de o usuário tentar:
+  // o navegador não volta a perguntar e a falha pareceria um defeito.
+  useEffect(() => {
+    let active = true;
+    void getCameraPermissionState().then((state) => {
+      if (active) setCameraBlocked(state === "denied");
+    });
+    return () => {
+      active = false;
+    };
+  }, [showScanner]);
+
+  const closeScanner = useCallback(() => {
+    setShowScanner(false);
+    setCameraStream(null);
+    // Libera a câmera (o `stop()` do ZXing cuida do caso web).
+    releaseCameraStream(streamRef.current);
+    streamRef.current = null;
+  }, []);
+
+  useEffect(() => () => releaseCameraStream(streamRef.current), []);
 
   async function openScanner() {
     if (Platform.OS !== "web") {
@@ -42,8 +68,24 @@ export default function NewBookScreen() {
         notify("Permissão necessária", "Autorize o acesso à câmera para ler o código de barras ISBN.");
         return;
       }
+      setScannerLocked(false);
+      setShowScanner(true);
+      return;
     }
+
+    // Na web o pedido da câmera precisa acontecer dentro deste clique: fora do
+    // gesto do usuário o Safari nega a permissão sem nem exibir o aviso (era a
+    // causa do erro "Permissão de câmera negada").
+    const result = await acquireCameraStream();
+    if (!result.ok) {
+      setCatalogMessage(result.message);
+      setCameraBlocked(true);
+      notify("Não foi possível abrir a câmera", result.message);
+      return;
+    }
+    streamRef.current = result.stream;
     setScannerLocked(false);
+    setCameraStream(result.stream);
     setShowScanner(true);
   }
 
@@ -55,7 +97,7 @@ export default function NewBookScreen() {
       return;
     }
     setScannerLocked(true);
-    setShowScanner(false);
+    closeScanner();
     setIsbn(detectedIsbn);
     void fillFromCatalog(detectedIsbn);
   }
@@ -160,6 +202,7 @@ export default function NewBookScreen() {
             <Text className="text-[#163A2B] font-bold mt-3">Leitor de código de barras ISBN</Text>
             <Text className="text-[#6B7C70] text-xs mt-1 text-center">Use a câmera apenas para ler o código ISBN, sem incluir foto do livro.</Text>
             <Pressable onPress={openScanner} style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]} className="mt-4 w-full bg-[#D99A24] rounded-2xl py-3.5 flex-row items-center justify-center"><MaterialIcons name="qr-code-scanner" size={20} color={green} /><Text className="text-[#163A2B] font-bold ml-2">Ler código de barras</Text></Pressable>
+            {cameraBlocked ? <View className="mt-3 bg-[#FFF4E5] border border-[#D99A24] rounded-2xl p-4"><Text className="text-[#8A5A00] text-xs font-bold mb-1">Câmera bloqueada para este site</Text><Text className="text-[#6B4A12] text-xs leading-5 mb-2">O navegador já registrou uma recusa e não volta a perguntar sozinho. Para liberar:</Text><Text className="text-[#6B4A12] text-xs leading-5">• <Text className="font-bold">iPhone (Safari):</Text> toque em “AA” na barra de endereços › “Ajustes do Site” › Câmera › Permitir. Se não aparecer, use Ajustes › Safari › Câmera › Perguntar.</Text><Text className="text-[#6B4A12] text-xs leading-5 mt-1">• <Text className="font-bold">Android (Chrome):</Text> toque no cadeado na barra de endereços › Permissões › Câmera › Permitir.</Text><Text className="text-[#6B4A12] text-xs leading-5 mt-2">Depois toque em “Ler código de barras” novamente. Se preferir, digite o ISBN no campo abaixo e toque em “Consultar”.</Text></View> : null}
           </View>
 
           <View className="bg-[#E4EDE4] rounded-2xl p-3 mb-5 flex-row items-center"><MaterialIcons name={isReading ? "hourglass-top" : "auto-awesome"} size={18} color="#315843" /><Text className="flex-1 text-[#315843] text-xs leading-5 ml-2">{catalogMessage}</Text></View>
@@ -178,13 +221,13 @@ export default function NewBookScreen() {
           <View className="flex-row items-center gap-3 mt-4"><Pressable disabled={isSaving || isReading || !hydrated || isSaved} onPress={save} accessibilityLabel="Salvar livro no acervo" style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]} className={`flex-1 rounded-2xl py-4 border items-center flex-row justify-center shadow-lg ${isSaved ? "bg-[#2F7A4B] border-[#25643D]" : isSaving || isReading || !hydrated ? "bg-[#B8A77D] border-[#9C8A62]" : "bg-[#D99A24] border-[#B9780C]"}`}><MaterialIcons name={isSaved ? "check-circle" : "library-add"} size={20} color={isSaved ? "white" : green} /><Text className={`font-bold text-base ml-2 ${isSaved ? "text-white" : "text-[#163A2B]"}`}>{isSaved ? "Livro salvo" : isSaving ? "Salvando..." : "Salvar no acervo"}</Text>{isSaving && <ActivityIndicator color={green} size="small" className="ml-2" />}</Pressable>{isSaved && <View accessibilityLabel="Livro salvo com sucesso" className="w-14 h-14 rounded-2xl bg-[#2F7A4B] items-center justify-center border border-[#25643D]"><Text className="text-white text-3xl font-bold">✓</Text></View>}</View>
           <Text className="text-center text-[#6B7C70] text-xs mt-4 leading-5">O cadastro utiliza exclusivamente o ISBN e os dados retornados pelos catálogos selecionados.</Text>
         </ScrollView>
-        <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+        <Modal visible={showScanner} animationType="slide" onRequestClose={closeScanner}>
           <View className="flex-1 bg-black">
-            <BarcodeScanner formats={["ean13", "ean8", "code128"]} active={!scannerLocked} onScanned={handleBarcodeScanned} onError={(reason) => setCatalogMessage(reason)} />
+            <BarcodeScanner stream={cameraStream} formats={["ean13", "ean8", "code128"]} active={!scannerLocked} onScanned={handleBarcodeScanned} onError={(reason) => setCatalogMessage(reason)} />
             <View className="absolute inset-0 items-center justify-between p-6" pointerEvents="box-none">
               <View className="w-full flex-row justify-between items-center">
                 <Text className="text-white text-lg font-bold">Ler ISBN</Text>
-                <Pressable onPress={() => setShowScanner(false)} className="bg-black/50 rounded-full px-4 py-2"><Text className="text-white font-bold">Fechar</Text></Pressable>
+                <Pressable onPress={closeScanner} className="bg-black/50 rounded-full px-4 py-2"><Text className="text-white font-bold">Fechar</Text></Pressable>
               </View>
               <View className="w-72 h-36 border-2 border-[#D99A24] rounded-2xl" pointerEvents="none" />
               <Text className="text-white text-center bg-black/60 rounded-xl px-4 py-3">Aponte para o código de barras ISBN na contracapa.</Text>

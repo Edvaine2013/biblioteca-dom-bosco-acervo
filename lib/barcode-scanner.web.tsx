@@ -9,20 +9,24 @@
  * barras lineares de livro — o decodificador nunca era ativado: a câmera abria
  * e nenhum código era lido.
  *
- * Aqui usamos o ZXing, que já estava nas dependências do projeto, com um
- * `MultiFormatReader` de detecção mista (1D + 2D) e `TRY_HARDER`.
+ * O stream da câmera chega pronto, obtido dentro do gesto do usuário por
+ * `@/lib/camera-stream` (ver o comentário daquele arquivo: pedir a câmera fora
+ * do gesto faz o Safari negar a permissão).
  */
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { BrowserCodeReader, BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType, type Result } from "@zxing/library";
+import type { CameraStream } from "@/lib/camera-stream";
 
 export type BarcodeScannerProps = {
+  /** Stream já autorizado pelo usuário (obtido no clique do botão). */
+  stream: CameraStream;
   /** Formatos aceitos, nos mesmos nomes usados pelo expo-camera (ex.: "ean13"). */
   formats?: string[];
   /** Chamado a cada código lido, com o texto decodificado. */
   onScanned: (data: string) => void;
-  /** Chamado quando a câmera não pode ser iniciada. */
+  /** Chamado quando o scanner não consegue iniciar. */
   onError?: (message: string) => void;
 };
 
@@ -50,25 +54,8 @@ function resolveFormats(formats?: string[]) {
     : [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.CODE_128];
 }
 
-function describeError(error: unknown) {
-  const name = error instanceof Error ? error.name : "";
-  switch (name) {
-    case "NotAllowedError":
-    case "SecurityError":
-      return "Permissão de câmera negada. Autorize o acesso nas configurações do navegador e tente novamente.";
-    case "NotFoundError":
-    case "OverconstrainedError":
-      return "Nenhuma câmera compatível foi encontrada neste dispositivo.";
-    case "NotReadableError":
-      return "A câmera está em uso por outro aplicativo. Feche-o e tente novamente.";
-    default:
-      return "Não foi possível iniciar a câmera. Verifique a permissão do navegador e use a câmera traseira do celular.";
-  }
-}
-
-export function BarcodeScanner({ formats, onScanned, onError }: BarcodeScannerProps) {
+export function BarcodeScanner({ stream, formats, onScanned, onError }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const controlsRef = useRef<IScannerControls | null>(null);
   const onScannedRef = useRef(onScanned);
   const onErrorRef = useRef(onError);
   const [status, setStatus] = useState<"starting" | "running" | "error">("starting");
@@ -82,6 +69,8 @@ export function BarcodeScanner({ formats, onScanned, onError }: BarcodeScannerPr
 
   useEffect(() => {
     let cancelled = false;
+    const video = videoRef.current;
+    if (!video || !stream) return;
 
     const hints = new Map<DecodeHintType, unknown>();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, resolveFormats(formatKey.split(",")));
@@ -93,50 +82,36 @@ export function BarcodeScanner({ formats, onScanned, onError }: BarcodeScannerPr
       delayBetweenScanSuccess: 400,
     });
 
-    async function start() {
-      const video = videoRef.current;
-      if (!video) return;
-      try {
-        const controls = await reader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: { ideal: "environment" },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          video,
-          (result: Result | undefined) => {
-            if (cancelled || !result) return;
-            onScannedRef.current(result.getText());
-          },
-        );
+    let controls: { stop: () => void } | undefined;
+
+    reader
+      .decodeFromStream(stream, video, (result: Result | undefined) => {
+        if (cancelled || !result) return;
+        onScannedRef.current(result.getText());
+      })
+      .then((scannerControls) => {
         if (cancelled) {
-          controls.stop();
+          scannerControls.stop();
           return;
         }
-        controlsRef.current = controls;
+        controls = scannerControls;
         setStatus("running");
         setMessage("Aponte para o código de barras ISBN na contracapa.");
-      } catch (error) {
+      })
+      .catch(() => {
         if (cancelled) return;
-        const reason = describeError(error);
+        const reason = "Não foi possível iniciar a leitura. Feche e toque novamente em “Ler código de barras”.";
         setStatus("error");
         setMessage(reason);
         onErrorRef.current?.(reason);
-      }
-    }
-
-    void start();
+      });
 
     return () => {
+      // `stop()` encerra as tracks do stream e libera o vídeo.
       cancelled = true;
-      controlsRef.current?.stop();
-      controlsRef.current = null;
-      // Libera o elemento de vídeo para que a câmera seja desligada ao fechar.
-      if (videoRef.current) BrowserCodeReader.cleanVideoSource(videoRef.current);
+      controls?.stop();
     };
-  }, [formatKey]);
+  }, [stream, formatKey]);
 
   return (
     <View style={styles.wrapper}>
