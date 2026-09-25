@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { Alert, FlatList, Image, Modal, Pressable, Text, TextInput, View } from "react-native";
+import { FlatList, Image, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { getInitials, useLibrary, type Book } from "@/lib/library-store";
+import { confirm } from "@/lib/dialogs";
 
 const green = "#163A2B";
 
@@ -17,10 +18,7 @@ export default function AcervoScreen() {
   const filtered = useMemo(() => books.filter((book) => `${book.title} ${book.author} ${book.category}`.toLowerCase().includes(query.toLowerCase()) && (filter === "todos" || book.available)), [books, filter, query]);
 
   function loan(book: Book) {
-    Alert.alert("Registrar empréstimo", `Confirmar empréstimo de “${book.title}”?`, [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Confirmar", onPress: () => borrowBook(book.id, "Leitor atual") },
-    ]);
+    confirm("Registrar empréstimo", `Confirmar empréstimo de “${book.title}”?`, () => borrowBook(book.id, "Leitor atual"));
   }
   async function confirmDelete() {
     if (!bookToDelete) return;

@@ -1,12 +1,13 @@
-import { Alert, FlatList, Pressable, Text, View } from "react-native";
+import { FlatList, Pressable, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useLibrary } from "@/lib/library-store";
+import { confirm } from "@/lib/dialogs";
 
 export default function MovementsScreen() {
   const { books, loans, returnBook } = useLibrary();
   const activeLoans = loans.filter((loan) => !loan.returnedAt);
-  function returnLoan(id: string, title: string) { Alert.alert("Confirmar devolução", `Registrar a devolução de “${title}”?`, [{ text: "Cancelar", style: "cancel" }, { text: "Devolver", onPress: () => returnBook(id) }]); }
+  function returnLoan(id: string, title: string) { confirm("Confirmar devolução", `Registrar a devolução de “${title}”?`, () => returnBook(id), "Devolver"); }
   return (
     <ScreenContainer containerClassName="bg-[#F4F2EA]">
       <FlatList

@@ -1,10 +1,11 @@
 import { Camera, CameraView, type BarcodeScanningResult } from "expo-camera";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useLibrary } from "@/lib/library-store";
+import { notify } from "@/lib/dialogs";
 import { CATALOG_SOURCES, extractIsbn, isValidIsbn, lookupBookByIsbn, type CatalogBook } from "@/lib/catalog-lookup";
 
 const green = "#163A2B";
@@ -37,7 +38,7 @@ export default function NewBookScreen() {
     if (Platform.OS !== "web") {
       const permission = await Camera.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Permissão necessária", "Autorize o acesso à câmera para ler o código de barras ISBN.");
+        notify("Permissão necessária", "Autorize o acesso à câmera para ler o código de barras ISBN.");
         return;
       }
     }
@@ -98,15 +99,15 @@ export default function NewBookScreen() {
 
   async function save() {
     if (!hydrated) {
-      Alert.alert("Aguarde um instante", "O acervo ainda está carregando os registros salvos.");
+      notify("Aguarde um instante", "O acervo ainda está carregando os registros salvos.");
       return;
     }
     if (!isValidIsbn(isbn)) {
-      Alert.alert("ISBN inválido", "Leia o código de barras ou informe um ISBN-10/ISBN-13 válido antes de salvar.");
+      notify("ISBN inválido", "Leia o código de barras ou informe um ISBN-10/ISBN-13 válido antes de salvar.");
       return;
     }
     if (!title.trim() || !author.trim()) {
-      Alert.alert("Complete o registro", "Informe pelo menos o título e o autor para salvar o livro.");
+      notify("Complete o registro", "Informe pelo menos o título e o autor para salvar o livro.");
       return;
     }
     setIsSaving(true);
@@ -132,7 +133,7 @@ export default function NewBookScreen() {
       setCatalogMessage("Livro salvo com sucesso no acervo.");
       setTimeout(() => router.replace("/(tabs)/acervo" as any), 1200);
     } catch {
-      Alert.alert("Não foi possível salvar", "Verifique o armazenamento do dispositivo e tente novamente.");
+      notify("Não foi possível salvar", "Verifique o armazenamento do dispositivo e tente novamente.");
       setIsSaving(false);
     }
   }
