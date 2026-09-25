@@ -8,7 +8,7 @@ import { useLibrary } from "@/lib/library-store";
 import { notify } from "@/lib/dialogs";
 import { BarcodeScanner } from "@/lib/barcode-scanner";
 import { acquireCameraStream, getCameraPermissionState, releaseCameraStream, type CameraStream } from "@/lib/camera-stream";
-import { CATALOG_SOURCES, extractIsbn, isValidIsbn, lookupBookByIsbn, type CatalogBook } from "@/lib/catalog-lookup";
+import { CATALOG_SOURCES, explainIsbnIssue, isValidIsbn, lookupBookByIsbn, readIsbn, toIsbn13, type CatalogBook } from "@/lib/catalog-lookup";
 
 const green = "#163A2B";
 
@@ -91,15 +91,17 @@ export default function NewBookScreen() {
 
   function handleBarcodeScanned(data: string) {
     if (scannerLocked) return;
-    const detectedIsbn = extractIsbn(data);
-    if (!detectedIsbn) {
-      setCatalogMessage(`Código lido (${data}) não é um ISBN válido. Aponte para o código EAN-13 da contracapa.`);
+    // O scanner lê qualquer código de barras: é aqui que separamos o ISBN de
+    // um código de loja, para não consultar os catálogos com o número errado.
+    const reading = readIsbn(data);
+    if (!reading.ok) {
+      setCatalogMessage(reading.message);
       return;
     }
     setScannerLocked(true);
     closeScanner();
-    setIsbn(detectedIsbn);
-    void fillFromCatalog(detectedIsbn);
+    setIsbn(reading.isbn);
+    void fillFromCatalog(reading.isbn);
   }
 
   async function fillFromCatalog(value = isbn) {
@@ -108,7 +110,9 @@ export default function NewBookScreen() {
       return;
     }
     setIsReading(true);
-    setCatalogMessage("Consultando CBL Serviços, Google Books e Open Library...");
+    setCatalogMessage(
+      `Consultando ${CATALOG_SOURCES.map((source) => source.label).join(", ")}...`,
+    );
     try {
       const book = await lookupBookByIsbn(value);
       if (!book) {
@@ -146,7 +150,12 @@ export default function NewBookScreen() {
       return;
     }
     if (!isValidIsbn(isbn)) {
-      notify("ISBN inválido", "Leia o código de barras ou informe um ISBN-10/ISBN-13 válido antes de salvar.");
+      const explanation = explainIsbnIssue(isbn);
+      notify(
+        "ISBN inválido",
+        explanation ||
+          "Leia o código de barras ou informe um ISBN-10/ISBN-13 válido antes de salvar.",
+      );
       return;
     }
     if (!title.trim() || !author.trim()) {
@@ -156,7 +165,9 @@ export default function NewBookScreen() {
     setIsSaving(true);
     try {
       await addBook({
-        isbn: extractIsbn(isbn),
+        // Guardamos sempre o ISBN-13: é o formato atual e o que os catálogos
+        // usam. Se o livro antigo trouxer ISBN-10, ele é convertido.
+        isbn: toIsbn13(isbn) ?? isbn.trim(),
         title: title.trim(),
         subtitle: subtitle.trim() || undefined,
         author: author.trim(),
@@ -207,7 +218,7 @@ export default function NewBookScreen() {
 
           <View className="bg-[#E4EDE4] rounded-2xl p-3 mb-5 flex-row items-center"><MaterialIcons name={isReading ? "hourglass-top" : "auto-awesome"} size={18} color="#315843" /><Text className="flex-1 text-[#315843] text-xs leading-5 ml-2">{catalogMessage}</Text></View>
 
-          <View className="mb-4"><Text className="text-[#294B39] text-xs font-bold mb-2">ISBN</Text><View className="flex-row gap-2"><TextInput value={isbn} onChangeText={setIsbn} placeholder="Digite 10 ou 13 dígitos" placeholderTextColor="#91A197" keyboardType="number-pad" className="flex-1 bg-white border border-[#D7E0D8] rounded-2xl px-4 py-3.5 text-[#163A2B]" /><Pressable disabled={isReading} onPress={() => fillFromCatalog()} className="bg-[#D8EBD9] rounded-2xl px-4 items-center justify-center"><Text className="text-[#163A2B] font-bold text-xs">Consultar</Text></Pressable></View><Text className="text-[#6B7C70] text-xs mt-2">Cadastro manual: digite o ISBN e consulte para preencher os dados automaticamente.</Text><Text className="text-[#8A968D] text-[11px] mt-1">Fontes: {CATALOG_SOURCES.join(" · ")}</Text></View>
+          <View className="mb-4"><Text className="text-[#294B39] text-xs font-bold mb-2">ISBN</Text><View className="flex-row gap-2"><TextInput value={isbn} onChangeText={setIsbn} placeholder="Digite 10 ou 13 dígitos" placeholderTextColor="#91A197" keyboardType="number-pad" className="flex-1 bg-white border border-[#D7E0D8] rounded-2xl px-4 py-3.5 text-[#163A2B]" /><Pressable disabled={isReading} onPress={() => fillFromCatalog()} className="bg-[#D8EBD9] rounded-2xl px-4 items-center justify-center"><Text className="text-[#163A2B] font-bold text-xs">Consultar</Text></Pressable></View><Text className="text-[#6B7C70] text-xs mt-2">Cadastro manual: digite o ISBN e consulte para preencher os dados automaticamente.</Text><Text className="text-[#8A968D] text-[11px] mt-1 leading-4">Repositórios: {CATALOG_SOURCES.map((source) => `${source.label} (${source.origin})`).join(" · ")}</Text></View>
 
           <Field label="Título do livro" value={title} onChangeText={setTitle} placeholder="Ex.: O Pequeno Príncipe" />
           <Field label="Subtítulo (opcional)" value={subtitle} onChangeText={setSubtitle} placeholder="Ex.: edição comentada" />

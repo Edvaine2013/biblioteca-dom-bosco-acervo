@@ -1,13 +1,19 @@
 /**
  * Leitor de código de barras para a web (iOS/Android usam `barcode-scanner.tsx`).
  *
- * Por que este componente existe:
- * o `expo-camera` na web implementa a leitura com a biblioteca `jsQR`, que
- * **só** decodifica QR Code, e ainda exige `barcodeScannerSettings.barcodeTypes`
- * contendo "qr" para ligar o scanner (ver `ExpoCamera.web.js`,
- * `isQRScannerEnabled`). Como o acervo usa EAN-13/EAN-8/Code-128 — códigos de
- * barras lineares de livro — o decodificador nunca era ativado: a câmera abria
- * e nenhum código era lido.
+ * **Por que este componente existe.**
+ *
+ * 1. O `expo-camera` na web decodifica com a biblioteca `jsQR`, que **só**
+ *    entende QR Code, e ainda exige `barcodeScannerSettings.barcodeTypes`
+ *    contendo "qr" para ligar o scanner (ver `ExpoCamera.web.js`,
+ *    `isQRScannerEnabled`). Como o acervo usa EAN-13/EAN-8/Code-128 — códigos de
+ *    barras lineares de livro — o decodificador nunca era ativado.
+ *
+ * 2. A contracapa dos livros brasileiros costuma trazer **dois códigos**: o
+ *    ISBN (prefixo 978/979) e o código de controle de vendas da livraria. Se o
+ *    leitor capturar o código de loja, a consulta aos catálogos sai vazia. Por
+ *    isso cada quadro é decodificado em busca de **todos** os códigos visíveis e
+ *    o ISBN tem prioridade absoluta sobre os demais.
  *
  * O stream da câmera chega pronto, obtido dentro do gesto do usuário por
  * `@/lib/camera-stream` (ver o comentário daquele arquivo: pedir a câmera fora
@@ -17,6 +23,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType, type Result } from "@zxing/library";
+import { extractIsbn, isBooklandCandidate } from "@/lib/isbn";
 import type { CameraStream } from "@/lib/camera-stream";
 
 export type BarcodeScannerProps = {
@@ -54,6 +61,9 @@ function resolveFormats(formats?: string[]) {
     : [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.CODE_128];
 }
 
+/** Intervalo entre tentativas de leitura, em milissegundos. */
+const SCAN_INTERVAL_MS = 150;
+
 export function BarcodeScanner({ stream, formats, onScanned, onError }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const onScannedRef = useRef(onScanned);
@@ -69,6 +79,7 @@ export function BarcodeScanner({ stream, formats, onScanned, onError }: BarcodeS
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const video = videoRef.current;
     if (!video || !stream) return;
 
@@ -77,17 +88,72 @@ export function BarcodeScanner({ stream, formats, onScanned, onError }: BarcodeS
     // TRY_HARDER melhora a leitura de códigos 1D com pouca luz ou inclinados.
     hints.set(DecodeHintType.TRY_HARDER, true);
 
-    const reader = new BrowserMultiFormatReader(hints, {
-      delayBetweenScanAttempts: 150,
-      delayBetweenScanSuccess: 400,
-    });
+    const reader = new BrowserMultiFormatReader(hints);
+    const bitmapCanvas = document.createElement("canvas");
+
+    /**
+     * Procura **todos** os códigos do quadro, e não apenas um.
+     *
+     * O ZXing decodifica um código por chamada: quando a contracapa traz o
+     * código de loja e o ISBN lado a lado, ele devolve o primeiro que achar — e
+     * pode ser justamente o código de loja, que não identifica livro nenhum.
+     *
+     * Por isso o quadro é dividido em faixas sobrepostas (esquerda, centro,
+     * direita). Cada faixa é decodificada separadamente, de modo que um código
+     * nunca esconda o outro. Assim é possível comparar as leituras e ficar com o
+     * ISBN quando ele estiver visível.
+     */
+    const codesInFrame = (): string[] => {
+      const found = new Set<string>();
+      const frame = BrowserMultiFormatReader.createCanvasFromMediaElement(video);
+      const { width, height } = frame;
+      if (!width || !height) return [];
+
+      /** Faixas verticais: divisão ampla, com 25% de sobreposição. */
+      const bands: [number, number][] = [
+        [0, width],
+        [0, width * 0.62],
+        [width * 0.38, width],
+        [width * 0.25, width * 0.75],
+      ];
+
+      for (const [from, to] of bands) {
+        const bandWidth = Math.max(1, Math.round(to - from));
+        bitmapCanvas.width = bandWidth;
+        bitmapCanvas.height = height;
+        const ctx = bitmapCanvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) continue;
+        ctx.drawImage(frame, from, 0, bandWidth, height, 0, 0, bandWidth, height);
+
+        for (const invert of [false, true]) {
+          try {
+            const result: Result = reader.decodeFromCanvas(
+              invert ? invertCanvas(bitmapCanvas) : bitmapCanvas,
+            );
+            found.add(result.getText());
+          } catch {
+            // Nenhum código nesta faixa/modo: segue para o próximo.
+          }
+        }
+      }
+      return [...found];
+    };
 
     let controls: { stop: () => void } | undefined;
 
     reader
       .decodeFromStream(stream, video, (result: Result | undefined) => {
         if (cancelled || !result) return;
-        onScannedRef.current(result.getText());
+        const readings = new Set([result.getText(), ...codesInFrame()]);
+        const isbnReading = [...readings].find((value) => extractIsbn(value));
+        if (isbnReading) {
+          onScannedRef.current(isbnReading);
+          return;
+        }
+        // Sem ISBN no quadro: devolve o candidato mais provável (prefixo 978/979)
+        // ou, na falta dele, o que foi lido — para a tela explicar o engano.
+        const booklandLooking = [...readings].find((value) => isBooklandCandidate(value));
+        onScannedRef.current(booklandLooking ?? result.getText());
       })
       .then((scannerControls) => {
         if (cancelled) {
@@ -100,7 +166,8 @@ export function BarcodeScanner({ stream, formats, onScanned, onError }: BarcodeS
       })
       .catch(() => {
         if (cancelled) return;
-        const reason = "Não foi possível iniciar a leitura. Feche e toque novamente em “Ler código de barras”.";
+        const reason =
+          "Não foi possível iniciar a leitura. Feche e toque novamente em “Ler código de barras”.";
         setStatus("error");
         setMessage(reason);
         onErrorRef.current?.(reason);
@@ -131,6 +198,25 @@ export function BarcodeScanner({ stream, formats, onScanned, onError }: BarcodeS
       ) : null}
     </View>
   );
+}
+
+/** Inverte as cores do quadro, para leitura em etiquetas com fundo escuro. */
+function invertCanvas(source: HTMLCanvasElement) {
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return source;
+  ctx.drawImage(source, 0, 0);
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = image.data;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 255 - data[i];
+    data[i + 1] = 255 - data[i + 1];
+    data[i + 2] = 255 - data[i + 2];
+  }
+  ctx.putImageData(image, 0, 0);
+  return canvas;
 }
 
 const styles = StyleSheet.create({

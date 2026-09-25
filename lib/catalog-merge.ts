@@ -31,12 +31,22 @@ export function usefulCategory(value?: string, title?: string) {
   return category;
 }
 
+/**
+ * Junta as respostas dos catálogos em uma ficha única.
+ *
+ * A ordem de `entries` define a precedência de cada campo: as fontes
+ * brasileiras vêm primeiro, então o dado nacional prevalece e as fontes
+ * internacionais apenas completam os campos que faltarem. Todas as fontes que
+ * contribuíram são registradas em `catalogSource`, para o cadastro saber de
+ * onde veio cada informação.
+ */
 export function mergeCatalogBooks(isbn: string, entries: (CatalogBook | null)[]) {
   const books = entries.filter((entry): entry is CatalogBook => Boolean(entry));
   if (!books.length) return null;
   const first = (field: TextField) => books.map((book) => clean(book[field])).find(Boolean);
   const title = first("title");
   const category = books.map((book) => usefulCategory(book.category, title)).find(Boolean);
+  const sources = books.map((book) => clean(book.catalogSource)).filter((value): value is string => Boolean(value));
   return {
     isbn,
     title,
@@ -50,6 +60,6 @@ export function mergeCatalogBooks(isbn: string, entries: (CatalogBook | null)[])
     category,
     description: first("description"),
     coverUri: first("coverUri"),
-    catalogSource: books.map((book) => clean(book.catalogSource)).find(Boolean),
+    catalogSource: sources.length ? [...new Set(sources)].join(" · ") : undefined,
   } satisfies CatalogBook;
 }

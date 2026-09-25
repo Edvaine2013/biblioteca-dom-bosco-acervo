@@ -20,10 +20,10 @@ describe("decodificação do código de barras", () => {
     expect(extractIsbn("ISBN 9788535914849")).toBe("9788535914849");
   });
 
-  it("rejeita código de barras que não é ISBN (ex.: código interno da escola)", () => {
-    // Um EAN-13 com dígito verificador válido, mas que não é ISBN de livro.
-    expect(extractIsbn("7891234567895")).toBe("7891234567895");
-    // Já um número qualquer lido por engano não deve virar ISBN.
+  it("rejeita código de barras que não é ISBN (ex.: código de loja)", () => {
+    // EAN-13 com dígito verificador válido, mas que não é ISBN de livro: é o
+    // código de controle de vendas. Deve ser recusado, não virar ISBN.
+    expect(extractIsbn("7891234567895")).toBeUndefined();
     expect(extractIsbn("1234567890123")).toBeUndefined();
     expect(extractIsbn("CODIGO-INTERNO")).toBeUndefined();
   });
